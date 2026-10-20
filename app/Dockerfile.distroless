@@ -1,0 +1,25 @@
+FROM python:3.13-slim-trixie AS build
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir --no-compile --target=/deps -r requirements.txt
+
+FROM gcr.io/distroless/python3-debian13:nonroot
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/python
+
+WORKDIR /app
+COPY --from=build /deps /opt/python
+COPY app.py .
+
+USER 10001:10001
+EXPOSE 5000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["/usr/bin/python", "-c", "import urllib.request as u; u.urlopen('http://localhost:5000/health')"]
+
+ENTRYPOINT ["/usr/bin/python"]
+CMD ["-m", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--access-logfile", "-", "app:app"]
+
